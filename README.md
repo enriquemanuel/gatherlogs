@@ -3,7 +3,7 @@ Script that automatically connects to all servers and brings the access logs to 
 
 ## Execution
 ```shell
-[root@S21Q08VA2 ~]# sh /tmp/bk/evalenzuela/gatherlogs.sh 
+sh gatherlogs.sh 
 What is the Client Code that you want to get the logs? For Example: fgprd-100840-12459
 fgprd-301590-154567
 Please enter the start date of the logs to grab: (format: 2015-04-22): 2015-04-25
