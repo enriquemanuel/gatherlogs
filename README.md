@@ -2,8 +2,11 @@
 Script that automatically connects to all servers and brings the access logs to a centralized location for later use. (data mining)
 
 ## Execution
-```shell
+```bash
 sh gatherlogs.sh 
+```
+### How does it look while executing?
+```bash
 What is the Client Code that you want to get the logs? For Example: fgprd-100840-12459
 fgprd-301590-154567
 Please enter the start date of the logs to grab: (format: 2015-04-22): 2015-04-25
