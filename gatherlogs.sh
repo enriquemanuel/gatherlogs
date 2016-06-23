@@ -1,202 +1,147 @@
 #!/bin/bash
 
+## Before we get started, make sure this is being run from a writeable location.
+cwd=`pwd`
+if [ ! -w "$cwd" ]; then
+  echo "${red}${bold}Error:${normal} Current Directory is not writeable by you."
+  exit 0
+fi
 
-export STARTDATE="";
-export ENDDATE="";
+bold=$(tput bold)
+normal=$(tput sgr0)
+red=$(tput setaf 1)
+green=$(tput setaf 2)
 
-# Getting Client ID
-echo "What is the Client Code that you want to get the logs? For Example: fgprd-100840-12459"
-read clientid
+vFILENAME='ops_webtech_data.txt'
+declare -a vDATERANGE=()
+echo
+echo "We are downloading the client list to work on"
 
-<<COMMENT
-# not using this for the time being.
-# Getting the type of environment
-while true; do
-  read -p  "What type of environment, Production[1] or Stage[2]?: " env
-  case $env in
-    prd | prod | production | 1 | PRD | Prd)
-      echo "you selected Production"; break;
-      ;;
-    stg | stage | staging | 2 | STG | Stg)
-      echo "you selected Staging"; break;
-      ;;
-    *)
-      echo "That is not a valid response.";
-      echo "Please valid responses are: prd, production, PRD, stg, stage, STG, Stg, 1, 2";
-  esac
-done
-COMMENT
+# some back up functions
+function trap2exit (){
 
-<<COMMENT
-# not using this for the time being.
-# We have disabled this function to select the type of logs, since we are going to always get Tomcat access Logs since
-# Apache are not longer required and Tomcat have the PK1 of the user and the IP.
-# Identify what log
-while true; do
-  read -p "What Log are you looking to get? Tomcat-AccessLog[1], Apache-AccessLog[2]: " log
-  case $log in
-    1) echo "You Selected Tomcat Access Logs"; break;
-      ;;
-    2) echo "You Selected Apache Access Logs"; break;
-      ;;
-    *) echo "You have typed a not valid response."
-       echo "Please valid responses are: 1, 2"
-  esac
-done
-COMMENT
-
-
-
-
-# Start Date (2015-04-22)
-while true; do
-  read -p "Please enter the start date of the logs to grab: (format: 2015-04-22): " start_date
-  if [[ $start_date == [0-3][0-9][0-1][0-9]-[0-9][0-9]-[0-9][0-9] ]]; then
-    export STARTDATE=$start_date;
-    break
+  echo "\n${normal}Exiting...";
+  if [[ -f $vFILENAME ]]; then
+    rm -rf $vFILENAME
   fi
-
-done
-
-
-
-# End Date (2015-04-22)
-while true; do
-  read -p "Please enter the end date of the logs to grab: (format: 2015-04-22): " end_date
-  if [[ $end_date == [0-3][0-9][0-1][0-9]-[0-9][0-9]-[0-9][0-9] ]]; then
-    export ENDDATE=$end_date;
-    break;
-  fi
-done
-
-
-
-validate () {
-
-
-  echo " "
-  errorMsg="Client needs to be April 2014 or October 2014 release. This does not work before that."
-  string=`hostname`;
-  echo '-------------------';
-  echo "Reviewing $string ";
-
-  if [[ $string == *"db"* ]]; then
-    echo "  Err: Not an App Server. Exiting this server";
-    exit 1;
-
-  else
-    configVersion=`grep bbconfig.version.number= /usr/local/blackboard/config/bb-config.properties`;
-    version=${configVersion:24:60};
-    case $version in
-      9.1.201404.160205)
-        echo "  App Server is April 2014 Release.";
-
-        execution
-        exit;
-        echo '-------------------';
-      ;;
-      9.1.201410.160373)
-        echo "  App Server is October 2014 Release.";
-        execution
-        exit;
-        echo '-------------------';
-      ;;
-      *)
-      echo $errorMsg;
-      exit;
-    esac
-  fi
-
-}
-
-function execution {
-  #load bash if not loaded
-  if [ -n "$BASH_ENV" ]; then . "$BASH_ENV"; 
-  fi
-
-  #get array of date range
-  #modifying the date to make date computations
-  startdate=${STARTDATE:0:4}${STARTDATE:5:2}${STARTDATE:8:2};
-  enddate=${ENDDATE:0:4}${ENDDATE:5:2}${ENDDATE:8:2};
-  dates=();
-
-
-  date=$startdate;
-  while (( ${date} != ${enddate} )); do
-    dates+=( "$date" );
-    date="$(date --date="$date + 1 days" +'%Y%m%d')";
-  done
-  dates+=( "$enddate");
-  
-
-
-  if [ -d $LOGMINER ]; then
-    echo "Directory already exists";
-    cd /usr/local/blackboard/content/data-mining-logs/;
-  else
-    echo "Directory does not exist. Creating it.";
-    mkdir -p /usr/local/blackboard/content/data-mining-logs;
-    cd /usr/local/blackboard/content/data-mining-logs/;
-  fi
-
-
-  # identify if the server is FlexGen or AP
-  vNAME=`hostname`;
-  vID=${vNAME:0:2};
-
-  if [[ $vID == "fg" ]]; then # its flexgen
-    vAPPS=${vNAME: -6};
-  else
-    vAPPS=${vNAME: -5};
-  fi
-
-
-  # Logs locations to search and copy from
-  OLDLOCATION=/usr/local/blackboard/asp/`hostname`/var/log/tomcat;
-  NEWLOCATION1=/usr/local/blackboard/asp/`hostname`/tomcat;
-  BBHOMELOGS="/usr/local/blackboard/logs/tomcat";
-
-  # now lets search for the logs in the *not archived* location - regular logs
-  for date in ${dates[@]}; do
-    filename=$vNAME-bb-access-log.${date:0:4}-${date:4:2}-${date:6:2}.txt;
-    cp $BBHOMELOGS/*bb-access-log.*${date:0:4}-${date:4:2}-${date:6:2}* /usr/local/blackboard/content/data-mining-logs/$filename;
-  done
-
-  # now lets search for archived logs
-  for date in ${dates[@]}; do
-    filename=$vNAME-bb-access-log.${date:0:4}-${date:4:2}-${date:6:2}.gz;
-    cp $NEWLOCATION1/*bb-access-log.*${date:0:4}-${date:4:2}-${date:6:2}* /usr/local/blackboard/content/data-mining-logs/$filename;
-  done
-
-  # really old location if the client has it
-  if [ -d $OLDLOCATION ]; then
-    filename=$vNAME-bb-access-log.${date:0:4}-${date:4:2}-${date:6:2}.gz;
-    cp $NEWLOCATION1/*bb-access-log.*${date:0:4}-${date:4:2}-${date:6:2}* /usr/local/blackboard/content/data-mining-logs/$filename;
-  fi
-
-  # List content
-  ls -lsa;
+  exit 0;
 }
 
 
+# Read the Username for credentials
+echo
+read -p "Please provide your ${red}MH username:${normal}${bold} " vUSERNM
+
+# Download file using SCP to current directory
+echo "${normal}We will download the Client Database file into a temporal location..."
+scp -pq $vUSERNM@10.6.11.11:/mnt/asp/utils/bin/include/ops_webtech_data.txt ./
+echo "File downloaded."
+
+# Ask for Client Name
+read -p "${normal}What ${red}client${normal}  do you want to work on: ${bold}" vCLIENTNAME
+# Ask for Environment type (Production or Staging or Test)
+read -p "${normal}What ${red}environment${normal} do you want to work on (Production, Staging, Test...): ${bold}" vENVIRONMENT
+echo "${normal}"
+
+# Get unique URLS and ask client which one they want to work on
+vOPTIONS=($(grep --color=auto -i "$vCLIENTNAME" $vFILENAME | grep --color=auto -i $vENVIRONMENT | awk 'BEGIN { FS = "\t" } ; {print $14}' | sort | uniq))
+
+# Send to the user the list of URLS that we found and make them select one
+echo "${green}We found this options: ${normal}"
+vCOUNTER=0
+for i in "${vOPTIONS[@]}"
+do
+  echo "$vCOUNTER) $i"
+  vCOUNTER=$[$vCOUNTER +1]
+done
+echo
+
+# Ask to select one of the options above
+read -p "Input the above ${red}id number${normal} you want to work on: ${bold}" vARRAYID
+# Set the Working url
+vWORKINGURL=${vOPTIONS[$vARRAYID]}
 
 
-getIpsAndConnect () {
+if [ "$vWORKINGURL" == "" ]; then
+	echo "ERROR: Wrong Input, exiting"
+	exit 1
+fi
 
-  ips=`grep $clientid opsmart_server_list.txt | awk 'BEGIN {FS="\t"};  {a[$3]=$1} END { for (i in a) print a[i] | "sort" }'`
+# Now lets find the App Servers to work
+vTEMPAPPS=($(grep --color=auto -i "$vCLIENTNAME" $vFILENAME | grep --color=auto -i $vENVIRONMENT | grep --color=auto -i $vWORKINGURL | awk 'BEGIN { FS="\t"}; {print $3}' | sed  's/_/-/g'))
 
-  for ip in $ips; do
-    #ssh -o StrictHostKeyChecking=no $ip "$(typeset -f); validate"
-    ssh -tt -o StrictHostKeyChecking=no $ip "export ENDDATE=$ENDDATE; export STARTDATE=$STARTDATE; mkdir -p /usr/local/blackboard/content/data-mining-logs; $(typeset -f); validate"
+# remove DB from list of apps
+declare -a vAPPS=();
+for h in "${vTEMPAPPS[@]}"; do
+  if [[ ${h} != *"db0"* ]]; then
+    vAPPS+=($h);
+  fi
+done
+declare -a vAPPSIP=()
+for eachapp in "${vAPPS[@]}"; do
+    appname=$(echo $eachapp | sed 's/-/_/g')
+    tempip=$(grep --color=auto "$appname" ops_webtech_data.txt | awk 'BEGIN { FS="\t"}; {print $1}')
+    vAPPSIP+=($tempip)
+done
+
+# deleting the file so we are always up to date
+rm -rf $vFILENAME
 
 
 
+# Display the list of serverst that we found based on their criteria
+echo "${normal}We found the following Apps to work based on your input: "
+vCOUNTER=1
+for servername in "${vAPPS[@]}"; do
+  echo "$vCOUNTER) $servername"
+  vCOUNTER=$[$vCOUNTER +1]
+done
+echo
+echo "${bold}NOTE: ${normal}If the above is not correct, please CTRL+C to exit the app and restart it."
+echo
+
+# Ask for a specific date in regular expresion to search for
+vCURDATE=`date +%Y-%m-%d`
+read -p "Input the ${red}Start Date${normal} (YYYY-MM-DD) (e.g: lower than end date): ${bold}" vSTARTDATE
+echo "${normal}"
+read -p "Input the ${red}End Date${normal} (YYYY-MM-DD) (e.g: higher than start date): ${bold}" vENDDATE
+echo "${normal}"
+
+# Create Date Ranges
+if date -v 1d > /dev/null 2>&1; then
+  currentDateTs=$(date -j -f "%Y-%m-%d" $vSTARTDATE "+%s")
+  endDateTs=$(date -j -f "%Y-%m-%d" $vENDDATE "+%s")
+  offset=86400
+
+  while [ "$currentDateTs" -le "$endDateTs" ]
+  do
+    date=$(date -j -f "%s" $currentDateTs "+%Y-%m-%d")
+
+    datearrange+=($date)
+    currentDateTs=$(($currentDateTs+$offset))
   done
-}
+else
+  d=$1
+  while [ "$d" != "$vENDDATE" ]; do
+    datearrange+=('$d')
+    d=$(date -I -d "$d + 1 day")
+  done
+fi
 
+vCOUNTER=0
+for h in "${vAPPSIP[@]}"; do
+  echo "Connecting to ${vAPPS[$vCOUNTER]}"
+  for day in "${datearrange[@]}"; do
+    scp -p -oStrictHostKeyChecking=no $vUSERNM@$h:/usr/local/blackboard/logs/tomcat/bb-access-log.$day.txt ./${vAPPS[$vCOUNTER]}_bb-access-log.$day.txt
+    scp -p -oStrictHostKeyChecking=no $vUSERNM@$h:/usr/local/blackboard/asp/${vAPPS[$vCOUNTER]}/tomcat/bb-access-log.$day.txt.gz ./${vAPPS[$vCOUNTER]}_bb-access-log.$day.txt.gz
+    scp -p -oStrictHostKeyChecking=no $vUSERNM@$h:/usr/local/blackboard/logs/bb-authentication-log.$day.txt ./${vAPPS[$vCOUNTER]}_bb-authentication-log.$day.txt
+    scp -p -oStrictHostKeyChecking=no $vUSERNM@$h:/usr/local/blackboard/.snapshot/weekly.5/logs/bb-services-log.$day.txt ./${vAPPS[$vCOUNTER]}_bb-services-log.$day.txt
+  done
+  echo "Disconnecting from ${vAPPS[$vCOUNTER]}"
+  echo ""
+  vCOUNTER=$[$vCOUNTER+1]
+done
 
-
-getIpsAndConnect
-
-#file with all the servers is here
-#####   /mnt/asp/utils/bin/include
+echo "${normal}The ${red}following files were downloaded${normal}: ${bold}";
+ls -l
+echo "$normal";
